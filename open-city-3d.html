@@ -1,1 +1,118 @@
-PLACEHOLDER_WILL_FAIL
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Open City — Game 3D thế giới mở</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/PointerLockControls.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:Sora,sans-serif;background:#0a0e1a;color:#e8eef8;overflow:hidden}
+#c{position:fixed;inset:0;width:100%;height:100%}
+.hud{position:fixed;z-index:20;pointer-events:none}
+.panel{background:rgba(10,14,28,.8);backdrop-filter:blur(10px);border:1px solid rgba(148,163,184,.25);border-radius:12px;padding:10px 14px}
+#cross{position:fixed;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;border:2px solid rgba(255,255,255,.5);border-radius:50%;z-index:15;pointer-events:none}
+#blocker{position:fixed;inset:0;z-index:50;background:rgba(5,8,18,.85);display:flex;align-items:center;justify-content:center;cursor:pointer}
+#blocker h1{font-size:clamp(22px,5vw,36px);margin-bottom:8px}
+#blocker p{opacity:.8;font-size:14px}
+</style>
+</head>
+<body>
+<div id="blocker"><div style="text-align:center;max-width:420px;padding:24px">
+<div style="font-size:11px;letter-spacing:.25em;color:#38bdf8;margin-bottom:8px">HARDWIN · OPEN CITY</div>
+<h1>🏙️ Open City</h1>
+<p>Bấm để bắt đầu · WASD di chuyển · Shift chạy · Space nhảy · F lên/xuống xe · Chuột nhìn</p>
+</div></div>
+<div id="cross"></div>
+<div class="hud panel" style="left:12px;top:12px"><div id="mode">🚶 Đi bộ</div><div id="spd">0 km/h</div></div>
+<canvas class="hud" id="mmap" width="140" height="140" style="right:12px;top:12px;width:140px;height:140px;border-radius:12px;border:1px solid rgba(148,163,184,.3);background:rgba(10,14,28,.85)"></canvas>
+<div class="hud panel" style="right:12px;bottom:12px"><span id="time">12:00</span> · <span id="cnt">0 xe · 0 người</span></div>
+<div class="hud panel" style="left:12px;bottom:12px;max-width:260px;font-size:12px;opacity:.9" id="hint">Gần xe: nhấn F để lên</div>
+<div id="c"></div>
+<script>
+(function boot(n){
+if(typeof THREE==='undefined'||!THREE.PointerLockControls){if(n<100)return setTimeout(function(){boot(n+1)},200);return;}
+var container=document.getElementById('c');
+var W=innerWidth,H=innerHeight;
+var renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.setSize(W,H);container.appendChild(renderer.domElement);
+var scene=new THREE.Scene();scene.background=new THREE.Color(0x87b5e0);scene.fog=new THREE.FogExp2(0x87b5e0,0.004);
+var camera=new THREE.PerspectiveCamera(70,W/H,0.1,600);
+var controls=new THREE.PointerLockControls(camera,document.body);
+var blocker=document.getElementById('blocker');
+blocker.addEventListener('click',function(){controls.lock();});
+controls.addEventListener('lock',function(){blocker.style.display='none';});
+controls.addEventListener('unlock',function(){blocker.style.display='flex';});
+scene.add(controls.getObject());
+scene.add(new THREE.AmbientLight(0xffffff,0.55));
+var sunL=new THREE.DirectionalLight(0xfff2dd,0.95);sunL.position.set(40,80,20);scene.add(sunL);
+function rnd(a,b){return a+Math.random()*(b-a)}
+var ground=new THREE.Mesh(new THREE.PlaneGeometry(500,500),new THREE.MeshStandardMaterial({color:0x3d4045}));ground.rotation.x=-Math.PI/2;scene.add(ground);
+var buildings=[],cars=[],npcs=[];
+for(var i=-5;i<=5;i++){
+var roadZ=new THREE.Mesh(new THREE.PlaneGeometry(14,500),new THREE.MeshStandardMaterial({color:0x1a1a1a}));roadZ.rotation.x=-Math.PI/2;roadZ.position.set(i*42,0.03,0);scene.add(roadZ);
+var roadX=new THREE.Mesh(new THREE.PlaneGeometry(500,14),new THREE.MeshStandardMaterial({color:0x1a1a1a}));roadX.rotation.x=-Math.PI/2;roadX.position.set(0,0.03,i*42);scene.add(roadX);}
+for(var gx=-4;gx<=4;gx++)for(var gz=-4;gz<=4;gz++){
+if(Math.abs(gx)<1&&Math.abs(gz)<1)continue;
+var h=rnd(10,42);var bw=rnd(12,22),bd=rnd(12,22);
+var mat=new THREE.MeshStandardMaterial({color:new THREE.Color().setHSL(rnd(0.02,0.12),0.12,rnd(0.28,0.5))});
+var mesh=new THREE.Mesh(new THREE.BoxGeometry(bw,h,bd),mat);
+var px=gx*42+rnd(-8,8),pz=gz*42+rnd(-8,8);mesh.position.set(px,h/2,pz);scene.add(mesh);buildings.push({mesh:mesh,x:px,z:pz,w:bw,d:bd,h:h});}
+function makeCar(x,z,col){var g=new THREE.Group();var body=new THREE.Mesh(new THREE.BoxGeometry(2.2,0.7,4.2),new THREE.MeshStandardMaterial({color:col}));body.position.y=0.55;g.add(body);
+var cabin=new THREE.Mesh(new THREE.BoxGeometry(1.8,0.6,2),new THREE.MeshStandardMaterial({color:0x88ccee,transparent:true,opacity:0.7}));cabin.position.set(0,1.1,-0.2);g.add(cabin);
+g.position.set(x,0,z);scene.add(g);return {group:g,speed:rnd(6,14),dir:Math.random()>0.5?1:-1,axis:Math.random()>0.5?'x':'z'};}
+var carCols=[0xe74c3c,0x3498db,0x2ecc71,0xf1c40f,0x9b59b6,0xe67e22,0x1abc9c,0xffffff,0x34495e];
+for(var i=0;i<14;i++){cars.push(makeCar(rnd(-180,180),rnd(-180,180),carCols[i%carCols.length]));}
+function makeNpc(x,z){var g=new THREE.Group();var body=new THREE.Mesh(new THREE.CapsuleGeometry(0.25,0.7,4,8),new THREE.MeshStandardMaterial({color:new THREE.Color().setHSL(rnd(0,1),0.4,0.5)}));body.position.y=1;g.add(body);g.position.set(x,0,z);scene.add(g);return {group:g,angle:rnd(0,6.28),speed:rnd(1.5,3.5)};}
+for(var i=0;i<16;i++)npcs.push(makeNpc(rnd(-160,160),rnd(-160,160)));
+var velocity=new THREE.Vector3(),direction=new THREE.Vector3();
+var moveF=false,moveB=false,moveL=false,moveR=false,canJump=true,sprinting=false;
+var inCar=false,currentCar=null,eyeH=1.6;
+document.addEventListener('keydown',function(e){
+if(e.code==='KeyW'||e.code==='ArrowUp')moveF=true;if(e.code==='KeyS'||e.code==='ArrowDown')moveB=true;
+if(e.code==='KeyA'||e.code==='ArrowLeft')moveL=true;if(e.code==='KeyD'||e.code==='ArrowRight')moveR=true;
+if(e.code==='ShiftLeft'||e.code==='ShiftRight')sprinting=true;
+if(e.code==='Space'&&canJump&&!inCar){velocity.y+=12;canJump=false;}
+if(e.code==='KeyF')toggleCar();
+});
+document.addEventListener('keyup',function(e){
+if(e.code==='KeyW'||e.code==='ArrowUp')moveF=false;if(e.code==='KeyS'||e.code==='ArrowDown')moveB=false;
+if(e.code==='KeyA'||e.code==='ArrowLeft')moveL=false;if(e.code==='KeyD'||e.code==='ArrowRight')moveR=false;
+if(e.code==='ShiftLeft'||e.code==='ShiftRight')sprinting=false;
+});
+function toggleCar(){if(inCar){inCar=false;currentCar=null;controls.getObject().position.y=eyeH;document.getElementById('mode').textContent='🚶 Đi bộ';document.getElementById('hint').textContent='Gần xe: nhấn F để lên';return;}
+var p=controls.getObject().position;var best=null,bd=4;
+cars.forEach(function(c){var d=p.distanceTo(c.group.position);if(d<bd){bd=d;best=c;}});if(best){inCar=true;currentCar=best;document.getElementById('mode').textContent='🚗 Đang lái xe';document.getElementById('hint').textContent='F: xuống xe';}}
+function collide(x,z,r){for(var i=0;i<buildings.length;i++){var b=buildings[i];if(Math.abs(x-b.x)<b.w/2+r&&Math.abs(z-b.z)<b.d/2+r)return true;}return false;}
+var clock=new THREE.Clock(),gameTime=12;
+function drawMinimap(){var cv=document.getElementById('mmap'),ctx=cv.getContext('2d');ctx.fillStyle='#0a1220';ctx.fillRect(0,0,140,140);
+var p=controls.getObject().position;ctx.save();ctx.translate(70,70);ctx.scale(0.35,-0.35);ctx.translate(-p.x,-p.z);
+ctx.fillStyle='#2a2a2a';buildings.forEach(function(b){ctx.fillRect(b.x-b.w/2,b.z-b.d/2,b.w,b.d);});
+ctx.strokeStyle='#fbbf24';ctx.lineWidth=3;for(var i=-5;i<=5;i++){ctx.beginPath();ctx.moveTo(i*42,-220);ctx.lineTo(i*42,220);ctx.stroke();ctx.beginPath();ctx.moveTo(-220,i*42);ctx.lineTo(220,i*42);ctx.stroke();}
+ctx.fillStyle='#ef4444';cars.forEach(function(c){ctx.fillRect(c.group.position.x-1.5,c.group.position.z-2,3,4);});
+ctx.restore();ctx.fillStyle='#38bdf8';ctx.beginPath();ctx.moveTo(70,58);ctx.lineTo(64,82);ctx.lineTo(76,82);ctx.closePath();ctx.fill();}
+function animate(){requestAnimationFrame(animate);var dt=Math.min(clock.getDelta(),0.05);
+gameTime+=dt*0.02;if(gameTime>=24)gameTime-=24;var hh=Math.floor(gameTime),mm=Math.floor((gameTime%1)*60);
+document.getElementById('time').textContent=(hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm;
+var day=Math.sin((gameTime-6)/24*Math.PI*2);scene.background.setHSL(0.58,0.45,0.35+day*0.25);sunL.intensity=0.4+Math.max(0,day)*0.7;
+if(controls.isLocked){velocity.x-=velocity.x*8*dt;velocity.z-=velocity.z*8*dt;velocity.y-=9.8*4*dt;
+direction.z=Number(moveF)-Number(moveB);direction.x=Number(moveR)-Number(moveL);direction.normalize();
+var sp=inCar?(sprinting?28:16):(sprinting?12:6);
+if(moveF||moveB)velocity.z-=direction.z*sp*12*dt;if(moveL||moveR)velocity.x-=direction.x*sp*12*dt;
+var obj=controls.getObject();var ox=obj.position.x,oz=obj.position.z;
+controls.moveRight(-velocity.x*dt);controls.moveForward(-velocity.z*dt);
+if(collide(obj.position.x,obj.position.z,0.6)){obj.position.x=ox;obj.position.z=oz;}
+obj.position.y+=velocity.y*dt;if(obj.position.y<eyeH){velocity.y=0;obj.position.y=eyeH;canJump=true;}
+if(inCar&&currentCar){currentCar.group.position.x=obj.position.x;currentCar.group.position.z=obj.position.z;currentCar.group.rotation.y=obj.rotation.y;}
+var kmh=Math.sqrt(velocity.x*velocity.x+velocity.z*velocity.z)*3.6;document.getElementById('spd').textContent=Math.round(kmh)+' km/h';}
+cars.forEach(function(c){if(inCar&&c===currentCar)return;if(c.axis==='x'){c.group.position.x+=c.speed*c.dir*dt;if(Math.abs(c.group.position.x)>200)c.dir*=-1;c.group.rotation.y=c.dir>0?-Math.PI/2:Math.PI/2;}
+else{c.group.position.z+=c.speed*c.dir*dt;if(Math.abs(c.group.position.z)>200)c.dir*=-1;c.group.rotation.y=c.dir>0?0:Math.PI;}});
+npcs.forEach(function(n){n.angle+=dt*0.3;n.group.position.x+=Math.cos(n.angle)*n.speed*dt;n.group.position.z+=Math.sin(n.angle)*n.speed*dt;n.group.rotation.y=-n.angle;});
+document.getElementById('cnt').textContent=cars.length+' xe · '+npcs.length+' người';drawMinimap();renderer.render(scene,camera);}
+animate();
+window.addEventListener('resize',function(){W=innerWidth;H=innerHeight;camera.aspect=W/H;camera.updateProjectionMatrix();renderer.setSize(W,H);});
+})(0);
+</script>
+</body>
+</html>
